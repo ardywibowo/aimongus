@@ -1,36 +1,157 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Among Us 🎮
 
-## Getting Started
+A web-based simulation of Among Us where AI agents play the game autonomously. Watch as AI crewmates and imposters interact, make decisions, and try to outsmart each other in a space-themed environment.
 
-First, run the development server:
+## Features 🌟
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- 🤖 AI-powered agents with unique personalities and decision-making
+- 🎯 Real-time game simulation with day/night cycles
+- 📊 Interactive game map showing agent locations and movements
+- 📝 Live game log tracking all events and agent communications
+- 🎨 Modern, responsive UI with real-time updates
+- 🔄 Multiple game phases: day, night, discussion, and voting
+- 👥 Dynamic agent interactions and voting system
+- 🎭 Imposter mechanics including kills and sabotage
+
+## Tech Stack 💻
+
+- **Frontend**: Next.js, React, TypeScript, Tailwind CSS
+- **Backend**: Node.js, Express, Socket.IO
+- **AI**: OpenAI API for agent decision-making
+- **Real-time Communication**: WebSocket (Socket.IO)
+
+## Prerequisites 📋
+
+- Node.js (v16 or higher)
+- npm or yarn
+- OpenAI API key (for AI agent decision-making)
+
+## Setup 🛠️
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/yourusername/dream-memory.git
+   cd dream-memory
+   ```
+
+2. Install dependencies:
+
+   ```bash
+   # Install root dependencies
+   npm install
+
+   # Install server dependencies
+   cd server
+   npm install
+   cd ..
+   ```
+
+3. Create a `.env` file in the server directory:
+
+   ```bash
+   cd server
+   touch .env
+   ```
+
+4. Add your OpenAI API key to the `.env` file:
+   ```
+   OPENAI_API_KEY=your_api_key_here
+   ```
+
+## Running the Project 🚀
+
+1. Start the development server:
+
+   ```bash
+   # Start the Next.js frontend (in the root directory)
+   npm run dev
+   ```
+
+2. In a separate terminal, start the game server:
+
+   ```bash
+   # Start the game server (in the root directory)
+   npm run server
+   ```
+
+3. Open your browser and navigate to:
+   ```
+   http://localhost:3000
+   ```
+
+## How to Play 🎮
+
+1. Click "Start Game" to begin a new simulation
+2. Watch as AI agents move around the map and interact
+3. Monitor the game log for events and agent communications
+4. Use the controls to:
+   - Start a new game
+   - Stop the current game
+   - Reset the game state
+
+## Game Mechanics 🎲
+
+### Agents
+
+- Each agent has a unique personality with traits like:
+  - Trust Level
+  - Skepticism Level
+  - Observation Skills
+  - Communication Style
+
+### Roles
+
+- **Crewmates**: Complete tasks and try to identify the imposter
+- **Imposter**: Eliminate crewmates while avoiding detection
+
+### Phases
+
+1. **Day Phase**: Agents move around and complete tasks
+2. **Night Phase**: Imposter can attempt kills
+3. **Discussion**: Agents discuss and share information
+4. **Voting**: Agents vote to eject a suspected imposter
+
+## Development 🛠️
+
+### Project Structure
+
+```
+dream-memory/
+├── src/
+│   ├── app/              # Next.js app directory
+│   ├── components/       # React components
+│   ├── lib/             # Game logic and utilities
+│   └── types/           # TypeScript type definitions
+├── server/              # Game server
+│   ├── aiAgent.ts       # AI agent implementation
+│   └── index.ts         # Server entry point
+└── public/             # Static assets
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Key Files
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `src/app/page.tsx`: Main game UI
+- `src/lib/gameManager.ts`: Game state management
+- `server/aiAgent.ts`: AI decision-making logic
+- `server/index.ts`: WebSocket server and game loop
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Contributing 🤝
 
-## Learn More
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-To learn more about Next.js, take a look at the following resources:
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## License 📄
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Deploy on Vercel
+## Acknowledgments 🙏
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Inspired by the game Among Us
+- Built with Next.js and Socket.IO
+- AI powered by OpenAI
