@@ -5,11 +5,10 @@ import {
   GameState,
   Vote,
 } from "../types/game";
-import { AgentAI } from "./agentLogic";
+import { getAIMove } from "../../server/aiAgent";
 
 export class GameManager {
   private gameState: GameState;
-  private agentAIs: Map<string, AgentAI>;
   private readonly locations = [
     "Cafeteria",
     "Reactor",
@@ -21,8 +20,6 @@ export class GameManager {
 
   constructor(numPlayers: number = 8) {
     this.gameState = this.initializeGame(numPlayers);
-    this.agentAIs = new Map();
-    this.initializeAgentAIs();
   }
 
   private initializeGame(numPlayers: number): GameState {
@@ -81,13 +78,17 @@ export class GameManager {
     };
   }
 
-  private initializeAgentAIs() {
-    for (const agent of this.gameState.agents) {
-      this.agentAIs.set(agent.id, new AgentAI(agent, this.gameState));
-    }
-  }
-
   private addEvent(event: GameEvent) {
+    // Add timestamp if not provided
+    if (!event.timestamp) {
+      event.timestamp = Date.now();
+    }
+    console.log("Adding event:", {
+      type: event.type,
+      details: event.details,
+      agentId: event.agentId,
+      location: event.location,
+    });
     this.gameState.events.push(event);
   }
 
@@ -126,23 +127,37 @@ export class GameManager {
     const aliveAgents = this.gameState.agents.filter((a) => a.isAlive);
 
     for (const agent of aliveAgents) {
-      const ai = this.agentAIs.get(agent.id);
-      if (ai) {
-        const decision = ai.makeDecision();
-        if (decision.vote) {
-          votes.push(decision.vote);
+      const aiMove = await getAIMove(agent, this.gameState);
+      // Parse aiMove for vote action
+      if (aiMove.toLowerCase().startsWith("vote")) {
+        // Try to extract target and reason
+        const match = aiMove.match(/vote for (.+?) because (.+)/i);
+        let targetName = "";
+        let reason = aiMove;
+        if (match) {
+          targetName = match[1].trim();
+          reason = match[2].trim();
+        }
+        const target = this.gameState.agents.find(
+          (a) => a.personality.name.toLowerCase() === targetName.toLowerCase()
+        );
+        if (target) {
+          votes.push({
+            voterId: agent.id,
+            targetId: target.id,
+            reason,
+          });
           this.addEvent({
             type: "vote",
             timestamp: Date.now(),
             location: "Meeting Room",
             agentId: agent.id,
-            targetId: decision.vote.targetId,
-            details: decision.vote.reason,
+            targetId: target.id,
+            details: reason,
           });
         }
       }
     }
-
     return votes;
   }
 
@@ -210,50 +225,137 @@ export class GameManager {
       return this.gameState;
     }
 
+    console.log("Starting round", this.gameState.currentRound);
+
     // Day phase
     this.gameState.phase = "day";
+    this.addEvent({
+      type: "meeting_called",
+      timestamp: Date.now(),
+      location: "Ship",
+      agentId: "system",
+      details: `Round ${this.gameState.currentRound} begins - Day phase starts`,
+    });
+
+    // Move agents and update their locations
     this.moveAgents();
     this.updateLastSeenWith();
+
+    // Add movement events for each agent
+    for (const agent of this.gameState.agents) {
+      if (agent.isAlive) {
+        console.log(
+          `Agent ${agent.personality.name} moved to ${agent.location}`
+        );
+        this.addEvent({
+          type: "task_complete",
+          timestamp: Date.now(),
+          location: agent.location,
+          agentId: agent.id,
+          details: `${agent.personality.name} is moving around in ${agent.location}`,
+        });
+      }
+    }
 
     // Let agents make decisions
     for (const agent of this.gameState.agents) {
       if (agent.isAlive) {
-        const ai = this.agentAIs.get(agent.id);
-        if (ai) {
-          const decision = ai.makeDecision();
+        console.log(
+          `Getting AI move for ${agent.personality.name} (${agent.role})`
+        );
+        const aiMove = await getAIMove(agent, this.gameState);
+        console.log(`AI move for ${agent.personality.name}:`, aiMove);
 
-          if (decision.action === "kill" && agent.role === "imposter") {
-            const target = this.gameState.agents.find(
-              (a) => a.isAlive && a.role === "crewmate"
-            );
-            if (target) {
-              target.isAlive = false;
-              this.addEvent({
-                type: "kill",
-                timestamp: Date.now(),
-                location: target.location,
-                agentId: agent.id,
-                targetId: target.id,
-                details: `${target.personality.name} was killed!`,
-              });
-            }
+        // Add the AI's chat message as an event
+        this.addEvent({
+          type: "chat",
+          timestamp: Date.now(),
+          location: agent.location,
+          agentId: agent.id,
+          details: aiMove,
+        });
+
+        if (
+          aiMove.toLowerCase().startsWith("kill") &&
+          agent.role === "imposter"
+        ) {
+          // Try to extract target
+          const match = aiMove.match(/kill (.+)/i);
+          let targetName = "";
+          if (match) {
+            targetName = match[1].trim();
           }
+          const target = this.gameState.agents.find(
+            (a) =>
+              a.isAlive &&
+              a.role === "crewmate" &&
+              a.personality.name.toLowerCase() === targetName.toLowerCase()
+          );
+          if (target) {
+            console.log(
+              `${agent.personality.name} is killing ${target.personality.name}`
+            );
+            target.isAlive = false;
+            this.addEvent({
+              type: "kill",
+              timestamp: Date.now(),
+              location: target.location,
+              agentId: agent.id,
+              targetId: target.id,
+              details: `${agent.personality.name} eliminated ${target.personality.name} in ${target.location}!`,
+            });
+          }
+        } else if (aiMove.toLowerCase().startsWith("task")) {
+          console.log(`${agent.personality.name} completed a task`);
+          this.addEvent({
+            type: "task_complete",
+            timestamp: Date.now(),
+            location: agent.location,
+            agentId: agent.id,
+            details: `${agent.personality.name} completed a task in ${agent.location}`,
+          });
         }
       }
     }
 
     // Check if game is over after kills
     if (this.checkGameOver()) {
+      this.addEvent({
+        type: "meeting_called",
+        timestamp: Date.now(),
+        location: "Ship",
+        agentId: "system",
+        details: `Game Over! ${
+          this.gameState.winner === "crewmate" ? "Crewmates" : "Imposter"
+        } win!`,
+      });
       return this.gameState;
     }
 
     // Voting phase
     this.gameState.phase = "voting";
+    this.addEvent({
+      type: "meeting_called",
+      timestamp: Date.now(),
+      location: "Meeting Room",
+      agentId: "system",
+      details: "Emergency meeting called - Time to vote!",
+    });
+
     const votes = await this.runVotingPhase();
     this.processVotes(votes);
 
     // Check if game is over after voting
     if (this.checkGameOver()) {
+      this.addEvent({
+        type: "meeting_called",
+        timestamp: Date.now(),
+        location: "Ship",
+        agentId: "system",
+        details: `Game Over! ${
+          this.gameState.winner === "crewmate" ? "Crewmates" : "Imposter"
+        } win!`,
+      });
       return this.gameState;
     }
 
@@ -272,17 +374,26 @@ export class GameManager {
         ? this.gameState.agents.find((a) => a.id === event.targetId)
         : null;
 
+      const timestamp = new Date(event.timestamp).toLocaleTimeString();
+
       switch (event.type) {
         case "kill":
-          return `${agent?.personality.name} killed ${target?.personality.name} in ${event.location}!`;
+          return `[${timestamp}] 🔪 ${agent?.personality.name} eliminated ${target?.personality.name} in ${event.location}!`;
         case "vote":
-          return `${agent?.personality.name} voted for ${target?.personality.name}. Reason: ${event.details}`;
+          if (event.agentId === "system") {
+            return `[${timestamp}] 🗳️ ${event.details}`;
+          }
+          return `[${timestamp}] 🗳️ ${agent?.personality.name} voted for ${target?.personality.name}. Reason: ${event.details}`;
         case "task_complete":
-          return `${agent?.personality.name} completed a task in ${event.location}.`;
+          return `[${timestamp}] ✅ ${event.details}`;
         case "vent_use":
-          return `${agent?.personality.name} was seen using vents in ${event.location}!`;
+          return `[${timestamp}] 🕳️ ${agent?.personality.name} was seen using vents in ${event.location}!`;
+        case "meeting_called":
+          return `[${timestamp}] 📢 ${event.details}`;
+        case "chat":
+          return `[${timestamp}] 💭 ${agent?.personality.name}: ${event.details}`;
         default:
-          return event.details || "";
+          return `[${timestamp}] ℹ️ ${event.details || ""}`;
       }
     });
   }

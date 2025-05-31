@@ -19,14 +19,20 @@ export type Agent = {
   lastSeenWith: string[]; // IDs of agents last seen with
 };
 
-export type GameEvent = {
-  type: "kill" | "task_complete" | "vent_use" | "meeting_called" | "vote";
+export interface GameEvent {
+  type:
+    | "kill"
+    | "task_complete"
+    | "vent_use"
+    | "meeting_called"
+    | "vote"
+    | "chat";
   timestamp: number;
   location: string;
   agentId: string;
   targetId?: string;
-  details?: string;
-};
+  details: string;
+}
 
 export type GameState = {
   agents: Agent[];

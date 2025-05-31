@@ -26,28 +26,62 @@ export default function Home() {
       setIsConnected(false);
     });
 
-    socketInstance.on("gameState", (state: GameState) => {
-      setGameState(state);
+    socketInstance.on("gameState", (newState) => {
+      console.log("Received game state update:", {
+        round: newState.currentRound,
+        phase: newState.phase,
+        eventsCount: newState.events.length,
+        latestEvents: newState.events.slice(-3),
+        hasEvents: newState.events.length > 0,
+        events: newState.events,
+      });
+      setGameState(newState);
     });
 
-    socketInstance.on("gameLog", (log: string[]) => {
-      setGameLog(log);
+    socketInstance.on("gameLog", (newLog) => {
+      console.log("Received game log update:", {
+        logLength: newLog.length,
+        latestEntries: newLog.slice(-3),
+        hasEntries: newLog.length > 0,
+        log: newLog,
+      });
+      // Ensure we're setting a new array to trigger re-render
+      setGameLog([...newLog]);
     });
+
+    // Request initial game state and log
+    socketInstance.emit("requestInitialState");
 
     return () => {
+      console.log("Cleaning up socket connection");
       socketInstance.disconnect();
     };
   }, []);
 
+  // Add a separate effect to monitor game log changes
+  useEffect(() => {
+    console.log("Game log state changed:", {
+      logLength: gameLog.length,
+      latestEntries: gameLog.slice(-3),
+      hasEntries: gameLog.length > 0,
+      log: gameLog,
+    });
+  }, [gameLog]);
+
   const startGame = () => {
+    console.log("Starting game...");
+    setGameLog([]); // Clear existing log
     socket?.emit("startGame");
   };
 
   const stopGame = () => {
+    console.log("Stopping game...");
     socket?.emit("stopGame");
   };
 
   const resetGame = () => {
+    console.log("Resetting game...");
+    setGameLog([]); // Clear existing log
     socket?.emit("resetGame");
   };
 
@@ -140,17 +174,21 @@ export default function Home() {
           {/* Game Log */}
           <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
             <h2 className="text-2xl font-semibold mb-4 text-blue-400">
-              Game Log
+              Game Log ({gameLog?.length || 0} entries)
             </h2>
             <div className="h-[500px] overflow-y-auto space-y-2 text-slate-200">
-              {gameLog.map((log, index) => (
-                <p
-                  key={index}
-                  className="text-sm border-b border-slate-700 pb-2"
-                >
-                  {log}
-                </p>
-              ))}
+              {!gameLog || gameLog.length === 0 ? (
+                <p className="text-slate-400 italic">No game events yet...</p>
+              ) : (
+                gameLog.map((log, index) => (
+                  <p
+                    key={`${index}-${log}`}
+                    className="text-sm border-b border-slate-700 pb-2"
+                  >
+                    {log}
+                  </p>
+                ))
+              )}
             </div>
           </div>
         </div>
