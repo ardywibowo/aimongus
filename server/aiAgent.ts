@@ -111,15 +111,28 @@ export async function getAIMove(
     return "task";
   }
 
+  // Check if we're in voting phase
+  const isVotingPhase = gameState.phase === 'voting';
+  
   // Prepare a prompt for the agent
   const prompt = `
 You are playing an Among Us-like game as the following agent:
 ${JSON.stringify(agent, null, 2)}
 
+Current Phase: ${gameState.phase}
+
 Here is the full game state:
 ${JSON.stringify(gameState, null, 2)}
 
-Based on your role and everything that has happened so far, what is your next move? Reply with one of: "kill", "vote", "task", or "skip". If you choose "vote", specify who you vote for and why. If you choose "kill", specify who you want to kill. If you choose "task", specify what task you want to do. If you choose "skip", explain why.`;
+${isVotingPhase ? 
+  'You MUST vote for someone to eject. Consider who has been suspicious and who you can trust. ' +
+  'Format your response as: "vote for [player name] because [reason]"' :
+  'Based on your role and everything that has happened so far, what is your next move? ' +
+  'Reply with one of: "kill", "vote", "task", or "skip". ' +
+  'If you choose "vote", specify who you vote for and why. ' +
+  'If you choose "kill", specify who you want to kill. ' +
+  'If you choose "task", specify what task you want to do. ' +
+  'If you choose "skip", explain why.'}`;
 
   try {
     const response = await openai.chat.completions.create({

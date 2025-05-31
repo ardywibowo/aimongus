@@ -70,12 +70,14 @@ io.on("connection", (socket) => {
 
     // Add initial game start event
     const initialState = gameManager.getGameState();
+    const agentNames = initialState.agents.map(agent => agent.personality.name).join(', ');
+    
     initialState.events.push({
       type: "meeting_called",
       timestamp: Date.now(),
       location: "Ship",
       agentId: "system",
-      details: "Game started! Crewmates and Imposter are ready.",
+      details: `Game started! Crewmates and Imposter are ready.\n\nAgents: ${agentNames}`,
     });
 
     // Send initial state immediately

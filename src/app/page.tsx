@@ -437,7 +437,7 @@ export default function Home() {
               className="h-[600px] overflow-y-auto space-y-3 pr-4 custom-scrollbar"
             >
               {gameLog.length === 0 ? (
-                <div className="flex items-center justify-center h-full">
+                <div className="text-center py-8">
                   <p className="text-slate-400 italic">No game events yet...</p>
                 </div>
               ) : (

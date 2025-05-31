@@ -99,6 +99,17 @@ export class AgentAI {
       return { action: "dead" };
     }
 
+    // Handle discussion phase
+    if (this.gameState.phase === "discussion") {
+      const observations = this.analyzeEvents();
+      if (observations.length > 0) {
+        return {
+          action: "chat",
+          statement: observations[Math.floor(Math.random() * observations.length)]
+        };
+      }
+    }
+
     if (this.agent.role === "imposter") {
       return this.makeImposterDecision();
     }

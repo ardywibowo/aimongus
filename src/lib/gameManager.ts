@@ -132,39 +132,158 @@ export class GameManager {
     const votes: Vote[] = [];
     const aliveAgents = this.gameState.agents.filter((a) => a.isAlive);
 
+    
     for (const agent of aliveAgents) {
-      const aiMove = await getAIMove(agent, this.gameState);
-      // Parse aiMove for vote action
-      if (aiMove.toLowerCase().startsWith("vote")) {
-        // Try to extract target and reason
-        const match = aiMove.match(/vote for (.+?) because (.+)/i);
+      let voted = false;
+      let attempts = 0;
+      const maxAttempts = 3; // Maximum number of attempts to get a valid vote
+      
+      while (!voted && attempts < maxAttempts) {
+        attempts++;
+        const aiMove = await getAIMove(agent, this.gameState);
+        console.log(`Agent ${agent.personality.name} (${agent.role}) move:`, aiMove);
+        
+        // Try to parse different vote formats
         let targetName = "";
-        let reason = aiMove;
-        if (match) {
-          targetName = match[1].trim();
-          reason = match[2].trim();
+        let reason = "";
+        
+        // Format 1: "vote for X because Y"
+        let match = aiMove.match(/vote (?:for|to eject|to vote for) ([^\s,.]+)(?: because |: | - |\n)([\s\S]*)/i);
+        
+        // Format 2: "I vote for X because Y"
+        if (!match) {
+          match = aiMove.match(/(?:I )?(?:will )?vote (?:for|to eject|to vote for) ([^\s,.]+)(?: because |: | - |\n)?([\s\S]*)/i);
         }
-        const target = this.gameState.agents.find(
-          (a) => a.personality.name.toLowerCase() === targetName.toLowerCase()
-        );
-        if (target) {
+        
+        // Format 3: Just the target name
+        if (!match) {
+          // Try to find any agent name in the response
+          for (const a of this.gameState.agents) {
+            if (a.id !== agent.id && aiMove.toLowerCase().includes(a.personality.name.toLowerCase())) {
+              targetName = a.personality.name;
+              reason = `Suspicious behavior`;
+              break;
+            }
+          }
+        } else {
+          targetName = match[1].trim();
+          reason = (match[2] || 'Suspicious behavior').trim();
+        }
+        
+        // If we have a target name, try to find the agent
+        if (targetName) {
+          // Find target, excluding self
+          const target = this.gameState.agents.find(
+            (a) => a.isAlive && 
+                  a.id !== agent.id && 
+                  a.personality.name.toLowerCase().includes(targetName.toLowerCase())
+          );
+          
+          if (target) {
+            // Include recent discussion points in the vote reason
+            const recentDiscussions = this.gameState.events
+              .filter(e => e.type === "chat" && e.timestamp > Date.now() - 10000)
+              .map(e => e.details);
+
+            let voteReason = reason;
+            if (recentDiscussions.length > 0) {
+              voteReason += ` (${recentDiscussions.slice(-3).join(" ")})`;
+            }
+
+            console.log(`Agent ${agent.personality.name} voting for ${target.personality.name} because: ${voteReason}`);
+            
+            votes.push({
+              voterId: agent.id,
+              targetId: target.id,
+              reason: voteReason,
+            });
+            
+            this.addEvent({
+              type: "vote",
+              timestamp: Date.now(),
+              location: "Meeting Room",
+              agentId: agent.id,
+              targetId: target.id,
+              details: voteReason,
+            });
+            
+            voted = true; // Successfully voted
+          } else {
+            console.log(`Could not find target agent: ${targetName}`);
+          }
+        } else {
+          console.log(`No valid vote from ${agent.personality.name} (attempt ${attempts}): ${aiMove}`);
+        }
+      }
+      
+      // If we couldn't get a valid vote after max attempts, assign a random vote
+      if (!voted) {
+        console.log(`Assigning random vote for ${agent.personality.name} after ${maxAttempts} failed attempts`);
+        const possibleTargets = aliveAgents.filter(a => a.id !== agent.id);
+        if (possibleTargets.length > 0) {
+          const randomTarget = possibleTargets[Math.floor(Math.random() * possibleTargets.length)];
+          const defaultReason = `Couldn't decide, voting randomly for ${randomTarget.personality.name}`;
+          
           votes.push({
             voterId: agent.id,
-            targetId: target.id,
-            reason,
+            targetId: randomTarget.id,
+            reason: defaultReason,
           });
+          
           this.addEvent({
             type: "vote",
             timestamp: Date.now(),
             location: "Meeting Room",
             agentId: agent.id,
-            targetId: target.id,
-            details: reason,
+            targetId: randomTarget.id,
+            details: defaultReason,
           });
+        } else {
+          console.error(`No valid voting targets for ${agent.personality.name}`);
+        }
+      }
+    } // End of for loop
+    
+    return votes;
+  }
+
+  private getAgentObservations(agent: Agent): string[] {
+    const observations: string[] = [];
+    const recentEvents = this.gameState.events
+      .filter((e) => e.timestamp > Date.now() - 10000)
+      .filter((e) => e.type !== "vote" && e.type !== "chat");
+
+    for (const event of recentEvents) {
+      if (event.agentId === agent.id || event.targetId === agent.id) {
+        switch (event.type) {
+          case "kill":
+            if (event.agentId === agent.id) {
+              observations.push(`I saw a body near ${event.location}`);
+            } else {
+              observations.push(`I heard a kill sound near ${event.location}`);
+            }
+            break;
+          case "vent_use":
+            observations.push(`I saw someone using vents near ${event.location}`);
+            break;
+          case "task_complete":
+            observations.push(`I completed a task in ${event.location}`);
+            break;
         }
       }
     }
-    return votes;
+
+    // Add observations about other agents
+    for (const otherAgent of this.gameState.agents) {
+      if (otherAgent.id !== agent.id && otherAgent.isAlive) {
+        const lastSeen = otherAgent.lastSeenWith.includes(agent.id);
+        if (lastSeen) {
+          observations.push(`I was last seen with ${otherAgent.personality.name}`);
+        }
+      }
+    }
+
+    return observations;
   }
 
   private processVotes(votes: Vote[]): string | null {
@@ -338,6 +457,33 @@ export class GameManager {
       return this.gameState;
     }
 
+    // Discussion phase
+    this.gameState.phase = "discussion";
+    this.addEvent({
+      type: "meeting_called",
+      timestamp: Date.now(),
+      location: "Meeting Room",
+      agentId: "system",
+      details: "Discussion phase begins - Share your thoughts!",
+    });
+
+    // Let agents share their observations
+    for (const agent of this.gameState.agents) {
+      if (agent.isAlive) {
+        const observations = this.getAgentObservations(agent);
+        if (observations.length > 0) {
+          const observation = observations[Math.floor(Math.random() * observations.length)];
+          this.addEvent({
+            type: "chat",
+            timestamp: Date.now(),
+            location: "Meeting Room",
+            agentId: agent.id,
+            details: observation
+          });
+        }
+      }
+    }
+
     // Voting phase
     this.gameState.phase = "voting";
     this.addEvent({
@@ -345,7 +491,7 @@ export class GameManager {
       timestamp: Date.now(),
       location: "Meeting Room",
       agentId: "system",
-      details: "Emergency meeting called - Time to vote!",
+      details: "Voting phase begins - Time to cast your vote!",
     });
 
     // Discussion phase: Each agent makes a statement about who they suspect
