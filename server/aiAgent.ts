@@ -14,6 +14,43 @@ export async function getAIMove(
   agent: Agent,
   gameState: GameState
 ): Promise<string> {
+  // Check if we're in an emergency meeting
+  const isEmergencyMeeting =
+    gameState.phase === "voting" || gameState.phase === "discussion";
+
+  // During emergency meetings, we MUST vote
+  if (isEmergencyMeeting) {
+    // Find the most suspicious agent
+    let mostSuspicious: Agent | null = null;
+    let highestSuspicion = -1; // Start at -1 to ensure we pick someone even with 0 suspicion
+
+    for (const [agentId, suspicion] of agent.suspicions) {
+      const target = gameState.agents.find((a) => a.id === agentId);
+      if (target && target.isAlive && target.id !== agent.id) {
+        if (suspicion > highestSuspicion) {
+          mostSuspicious = target;
+          highestSuspicion = suspicion;
+        }
+      }
+    }
+
+    // If we found any agent (even with 0 suspicion), vote for them
+    if (mostSuspicious) {
+      return `vote for ${mostSuspicious.personality.name} because they have the highest suspicion level`;
+    }
+
+    // If somehow no agents are found (shouldn't happen), pick a random alive agent
+    const aliveAgents = gameState.agents.filter(
+      (a) => a.isAlive && a.id !== agent.id
+    );
+    if (aliveAgents.length > 0) {
+      const randomTarget =
+        aliveAgents[Math.floor(Math.random() * aliveAgents.length)];
+      return `vote for ${randomTarget.personality.name} because I need to make a decision`;
+    }
+  }
+
+  // For non-emergency meeting phases, use the original logic
   if (!process.env.OPENAI_API_KEY) {
     console.error("OpenAI API key not found in environment variables");
     // Fallback to a simple decision for testing
@@ -52,7 +89,7 @@ Based on your role and everything that has happened so far, what is your next mo
       temperature: 0.7,
     });
 
-    return response.choices[0].message?.content?.trim() || "skip";
+    return response.choices[0].message?.content?.trim() || "task";
   } catch (error) {
     console.error("Error calling OpenAI API:", error);
     // Fallback to simple decision if API call fails

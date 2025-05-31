@@ -342,8 +342,70 @@ export class GameManager {
       details: "Emergency meeting called - Time to vote!",
     });
 
+    // Discussion phase: Each agent makes a statement about who they suspect
+    this.gameState.phase = "discussion";
+    for (const agent of this.gameState.agents) {
+      if (agent.isAlive) {
+        // Use the agent's suspicion and observations to generate a statement
+        let mostSuspicious: Agent | null = null;
+        let highestSuspicion = -1; // Start at -1 to ensure we pick someone even with 0 suspicion
+
+        for (const [agentId, suspicion] of agent.suspicions) {
+          const target = this.gameState.agents.find((a) => a.id === agentId);
+          if (target && target.isAlive && target.id !== agent.id) {
+            if (suspicion > highestSuspicion) {
+              mostSuspicious = target;
+              highestSuspicion = suspicion;
+            }
+          }
+        }
+
+        // Always make a statement about the most suspicious person
+        let statement: string;
+        if (mostSuspicious) {
+          statement = `I'm voting for ${
+            mostSuspicious.personality.name
+          } because they have the highest suspicion level (${(
+            highestSuspicion * 100
+          ).toFixed(0)}%)`;
+        } else {
+          // If somehow no agents are found (shouldn't happen), pick a random alive agent
+          const aliveAgents = this.gameState.agents.filter(
+            (a) => a.isAlive && a.id !== agent.id
+          );
+          const randomTarget =
+            aliveAgents[Math.floor(Math.random() * aliveAgents.length)];
+          statement = `I'm voting for ${randomTarget.personality.name} because I need to make a decision`;
+        }
+
+        this.addEvent({
+          type: "chat",
+          timestamp: Date.now(),
+          location: "Meeting Room",
+          agentId: agent.id,
+          details: statement,
+        });
+      }
+    }
+
+    // Voting phase resumes
+    this.gameState.phase = "voting";
     const votes = await this.runVotingPhase();
-    this.processVotes(votes);
+    const ejectedAgentId = this.processVotes(votes);
+
+    // Announce who was voted out
+    if (ejectedAgentId) {
+      const agent = this.gameState.agents.find((a) => a.id === ejectedAgentId);
+      if (agent) {
+        this.addEvent({
+          type: "chat",
+          timestamp: Date.now(),
+          location: "Meeting Room",
+          agentId: "system",
+          details: `${agent.personality.name} was voted out and was a ${agent.role}!`,
+        });
+      }
+    }
 
     // Check if game is over after voting
     if (this.checkGameOver()) {

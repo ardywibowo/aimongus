@@ -23,7 +23,7 @@ export class AgentAI {
     for (const event of relevantEvents) {
       switch (event.type) {
         case "vent_use":
-          suspicion += 0.8;
+          suspicion += 10;
           break;
         case "kill":
           if (event.agentId === targetAgent.id) {
@@ -179,6 +179,46 @@ export class AgentAI {
         ? observations[Math.floor(Math.random() * observations.length)]
         : this.generateAlibi();
 
+    // Check if we're in an emergency meeting
+    const isEmergencyMeeting = this.gameState.events.some(
+      (event) => event.type === "meeting_called"
+    );
+
+    // During emergency meetings, we MUST vote for someone
+    if (isEmergencyMeeting) {
+      // If we have a most suspicious agent, vote for them
+      if (mostSuspicious) {
+        return {
+          action: "vote",
+          vote: {
+            voterId: this.agent.id,
+            targetId: mostSuspicious.id,
+            reason: `I'm voting for ${mostSuspicious.personality.name} because ${statement}`,
+          },
+          statement,
+        };
+      }
+
+      // If we don't have a suspicious agent, vote for a random alive agent
+      const aliveAgents = this.gameState.agents.filter(
+        (a) => a.isAlive && a.id !== this.agent.id
+      );
+      if (aliveAgents.length > 0) {
+        const randomTarget =
+          aliveAgents[Math.floor(Math.random() * aliveAgents.length)];
+        return {
+          action: "vote",
+          vote: {
+            voterId: this.agent.id,
+            targetId: randomTarget.id,
+            reason: `I need to vote for someone, and I haven't seen ${randomTarget.personality.name} doing tasks.`,
+          },
+          statement: "I need to make a decision based on what I've seen.",
+        };
+      }
+    }
+
+    // Outside of emergency meetings, use normal voting behavior
     if (mostSuspicious && highestSuspicion > 0.6) {
       return {
         action: "vote",
