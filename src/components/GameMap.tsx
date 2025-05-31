@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Agent, GameEvent } from "../types/game";
+import { motion } from "framer-motion";
 
 interface Room {
   id: string;
@@ -101,7 +102,7 @@ export default function GameMap({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Draw background
-    ctx.fillStyle = "#1a1a2e";
+    ctx.fillStyle = "rgba(15, 23, 42, 0.5)"; // slate-900 with opacity
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Draw connections (corridors)
@@ -110,7 +111,7 @@ export default function GameMap({
         const connectedRoom = ROOMS.find((r) => r.id === connectedRoomId);
         if (connectedRoom) {
           ctx.beginPath();
-          ctx.strokeStyle = "#2a2a3e";
+          ctx.strokeStyle = "rgba(51, 65, 85, 0.3)"; // slate-700 with opacity
           ctx.lineWidth = 40;
           ctx.moveTo(room.x + room.width / 2, room.y + room.height / 2);
           ctx.lineTo(
@@ -128,7 +129,7 @@ export default function GameMap({
       const room2 = ROOMS.find((r) => r.id === room2Id);
       if (room1 && room2) {
         ctx.beginPath();
-        ctx.strokeStyle = "#3a3a4e";
+        ctx.strokeStyle = "rgba(71, 85, 105, 0.3)"; // slate-600 with opacity
         ctx.lineWidth = 20;
         ctx.setLineDash([10, 10]);
         ctx.moveTo(room1.x + room1.width / 2, room1.y + room1.height / 2);
@@ -140,20 +141,47 @@ export default function GameMap({
 
     // Draw rooms
     ROOMS.forEach((room) => {
-      // Room background
-      ctx.fillStyle = "#2a2a3e";
+      // Room background with glassmorphism effect
+      ctx.fillStyle = "rgba(30, 41, 59, 0.5)"; // slate-800 with opacity
       ctx.fillRect(room.x, room.y, room.width, room.height);
 
       // Room border
-      ctx.strokeStyle = "#3a3a4e";
+      ctx.strokeStyle = "rgba(51, 65, 85, 0.5)"; // slate-700 with opacity
       ctx.lineWidth = 2;
       ctx.strokeRect(room.x, room.y, room.width, room.height);
 
       // Room name
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "14px Arial";
+      ctx.fillStyle = "rgba(226, 232, 240, 0.9)"; // slate-200 with opacity
+      ctx.font = "14px Inter, system-ui, sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(room.name, room.x + room.width / 2, room.y + 20);
+
+      // Check for events in this room
+      const roomEvents = events.filter(
+        (e) => e.location?.toLowerCase() === room.id
+      );
+      if (roomEvents.length > 0) {
+        const latestEvent = roomEvents[roomEvents.length - 1];
+        const isKill = latestEvent.type === "kill";
+        const isTask = latestEvent.type === "task";
+        const isChat = latestEvent.type === "chat";
+
+        // Event indicator
+        ctx.beginPath();
+        ctx.fillStyle = isKill
+          ? "rgba(239, 68, 68, 0.2)" // red-500 with opacity
+          : isTask
+          ? "rgba(34, 197, 94, 0.2)" // emerald-500 with opacity
+          : "rgba(59, 130, 246, 0.2)"; // blue-500 with opacity
+        ctx.arc(
+          room.x + room.width / 2,
+          room.y + room.height / 2,
+          30,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+      }
     });
 
     // Draw agents
@@ -171,52 +199,47 @@ export default function GameMap({
 
       // Agent circle
       ctx.beginPath();
-      ctx.fillStyle = agent.role === "imposter" ? "#ff4444" : "#44ff44";
+      ctx.fillStyle =
+        agent.role === "imposter"
+          ? "rgb(239, 68, 68)" // red-500
+          : "rgb(34, 197, 94)"; // emerald-500
       ctx.arc(x, y, 15, 0, Math.PI * 2);
       ctx.fill();
 
       // Agent border
-      ctx.strokeStyle = "#ffffff";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
       ctx.lineWidth = 2;
       ctx.stroke();
 
       // Agent name
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "12px Arial";
+      ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+      ctx.font = "12px Inter, system-ui, sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(agent.personality.name, x, y + 25);
-    });
-
-    // Draw recent events
-    const recentEvents = events.slice(-3);
-    recentEvents.forEach((event, index) => {
-      const room = ROOMS.find(
-        (r) => r.id.toLowerCase() === event.location.toLowerCase()
-      );
-      if (!room) return;
-
-      ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
-      ctx.beginPath();
-      ctx.arc(
-        room.x + room.width / 2,
-        room.y + room.height / 2,
-        30 + index * 10,
-        0,
-        Math.PI * 2
-      );
-      ctx.fill();
+      ctx.fillText(agent.personality.name[0], x, y + 5);
     });
   }, [agents, events, currentPhase]);
 
   return (
     <div className="relative">
-      <canvas ref={canvasRef} className="w-full h-auto rounded-lg shadow-lg" />
-      <div className="absolute top-4 right-4 bg-slate-800/90 text-white px-4 py-2 rounded-lg">
-        <p className="text-sm font-medium">Phase: {currentPhase}</p>
-        <p className="text-xs text-slate-300">
-          {agents.filter((a) => a.isAlive).length} players alive
-        </p>
-      </div>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="relative bg-slate-900/50 rounded-2xl p-6 backdrop-blur-sm border border-slate-700/50 shadow-xl"
+      >
+        <canvas ref={canvasRef} className="w-full h-auto rounded-lg" />
+        <div className="absolute top-4 right-4 flex flex-col gap-2">
+          <div className="px-4 py-2 rounded-full bg-slate-800/50 backdrop-blur-sm border border-slate-700/50">
+            <span className="text-sm font-medium text-slate-300 capitalize">
+              {currentPhase} Phase
+            </span>
+          </div>
+          <div className="px-4 py-2 rounded-full bg-slate-800/50 backdrop-blur-sm border border-slate-700/50">
+            <span className="text-sm font-medium text-slate-300">
+              {agents.filter((a) => a.isAlive).length} players alive
+            </span>
+          </div>
+        </div>
+      </motion.div>
     </div>
   );
 }
