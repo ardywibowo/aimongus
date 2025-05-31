@@ -80,6 +80,22 @@ const VENT_CONNECTIONS = [
   ["storage", "navigation"],
 ];
 
+// Add color mapping for crewmates
+const CREWMATE_COLORS: { [key: string]: string } = {
+  red: "rgb(239, 68, 68)", // red-500
+  blue: "rgb(59, 130, 246)", // blue-500
+  green: "rgb(34, 197, 94)", // emerald-500
+  yellow: "rgb(234, 179, 8)", // yellow-500
+  orange: "rgb(249, 115, 22)", // orange-500
+  purple: "rgb(168, 85, 247)", // purple-500
+  pink: "rgb(236, 72, 153)", // pink-500
+  cyan: "rgb(6, 182, 212)", // cyan-500
+  brown: "rgb(180, 83, 9)", // amber-700
+  lime: "rgb(132, 204, 22)", // lime-500
+  white: "rgb(248, 250, 252)", // slate-50
+  black: "rgb(30, 41, 59)", // slate-800
+};
+
 export default function GameMap({
   agents,
   events,
@@ -197,22 +213,72 @@ export default function GameMap({
       const x = room.x + 30 + Math.random() * (room.width - 60);
       const y = room.y + 30 + Math.random() * (room.height - 60);
 
-      // Agent circle
+      // Draw agent circle
       ctx.beginPath();
-      ctx.fillStyle =
-        agent.role === "imposter"
-          ? "rgb(239, 68, 68)" // red-500
-          : "rgb(34, 197, 94)"; // emerald-500
+
+      // Get the agent's color from their name (assuming color is in the name)
+      const agentColor = agent.personality.name.toLowerCase().includes("red")
+        ? "red"
+        : agent.personality.name.toLowerCase().includes("blue")
+        ? "blue"
+        : agent.personality.name.toLowerCase().includes("green")
+        ? "green"
+        : agent.personality.name.toLowerCase().includes("yellow")
+        ? "yellow"
+        : agent.personality.name.toLowerCase().includes("orange")
+        ? "orange"
+        : agent.personality.name.toLowerCase().includes("purple")
+        ? "purple"
+        : agent.personality.name.toLowerCase().includes("pink")
+        ? "pink"
+        : agent.personality.name.toLowerCase().includes("cyan")
+        ? "cyan"
+        : agent.personality.name.toLowerCase().includes("brown")
+        ? "brown"
+        : agent.personality.name.toLowerCase().includes("lime")
+        ? "lime"
+        : agent.personality.name.toLowerCase().includes("white")
+        ? "white"
+        : agent.personality.name.toLowerCase().includes("black")
+        ? "black"
+        : "blue";
+
+      // Set the fill color based on the agent's color
+      ctx.fillStyle = CREWMATE_COLORS[agentColor];
       ctx.arc(x, y, 15, 0, Math.PI * 2);
       ctx.fill();
 
-      // Agent border
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      // Draw agent border
+      if (agent.role === "imposter") {
+        // Draw a pulsing red circle around the imposter
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(239, 68, 68, 0.6)"; // red-500 with opacity
+        ctx.lineWidth = 3;
+        ctx.setLineDash([5, 5]);
+        ctx.arc(x, y, 22, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
 
-      // Agent name
-      ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+        // Draw a second, larger pulsing circle
+        ctx.beginPath();
+        ctx.strokeStyle = "rgba(239, 68, 68, 0.3)"; // red-500 with less opacity
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]);
+        ctx.arc(x, y, 25, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else {
+        // Regular white border for crewmates
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // Draw agent name
+      ctx.fillStyle =
+        agent.role === "imposter"
+          ? "rgba(239, 68, 68, 0.9)"
+          : "rgba(255, 255, 255, 0.9)";
       ctx.font = "12px Inter, system-ui, sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(agent.personality.name[0], x, y + 5);
