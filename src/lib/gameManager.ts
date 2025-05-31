@@ -58,7 +58,13 @@ export class GameManager {
         isAlive: true,
         location:
           this.locations[Math.floor(Math.random() * this.locations.length)],
-        suspicions: new Map(),
+        suspicions: new Map(
+          // Initialize suspicions for all other agents with a small random value
+          agents.map((otherAgent) => [
+            otherAgent.id,
+            Math.random() * 0.1, // Start with a small random suspicion (0-0.1)
+          ])
+        ),
         alibi: null,
         lastSeenWith: [],
       });

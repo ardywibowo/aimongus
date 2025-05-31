@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { io, Socket } from "socket.io-client";
-import { GameState } from "../types/game";
+import { GameState, Agent } from "../types/game";
 import GameMap from "../components/GameMap";
 import { motion } from "framer-motion";
 
@@ -11,7 +11,9 @@ export default function Home() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [gameLog, setGameLog] = useState<string[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+  const [isLoadingCards, setIsLoadingCards] = useState(true);
   const gameLogRef = useRef<HTMLDivElement>(null);
+  const cardsContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Initialize socket connection
@@ -37,6 +39,11 @@ export default function Home() {
         hasEvents: newState.events.length > 0,
         events: newState.events,
       });
+      // Convert suspicions back to Map for each agent
+      newState.agents = newState.agents.map((agent: Agent) => ({
+        ...agent,
+        suspicions: new Map(Object.entries(agent.suspicions)),
+      }));
       setGameState(newState);
     });
 
@@ -70,15 +77,30 @@ export default function Home() {
     });
   }, [gameLog]);
 
-  // Add effect to scroll to bottom when game log updates
+  // Add effect to handle card loading state
   useEffect(() => {
-    if (gameLogRef.current) {
-      gameLogRef.current.scrollTo({
-        top: gameLogRef.current.scrollHeight,
-        behavior: "smooth",
-      });
+    if (gameState?.agents) {
+      setIsLoadingCards(true);
+      // Small delay to ensure DOM is ready
+      const timer = setTimeout(() => {
+        setIsLoadingCards(false);
+      }, 100);
+      return () => clearTimeout(timer);
     }
-  }, [gameLog]);
+  }, [gameState?.agents]);
+
+  // Modify the game log scroll effect
+  useEffect(() => {
+    if (gameLogRef.current && !isLoadingCards) {
+      const scrollTimer = setTimeout(() => {
+        gameLogRef.current?.scrollTo({
+          top: gameLogRef.current.scrollHeight,
+          behavior: "smooth",
+        });
+      }, 100); // Small delay to ensure content is rendered
+      return () => clearTimeout(scrollTimer);
+    }
+  }, [gameLog, isLoadingCards]);
 
   const startGame = () => {
     console.log("Starting game...");
@@ -203,42 +225,189 @@ export default function Home() {
 
               <div>
                 <h3 className="text-lg font-semibold mb-4 text-blue-400">
-                  Players
+                  Players (Game Theory Analysis)
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {gameState.agents.map((agent) => (
-                    <motion.div
-                      key={agent.id}
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className={`p-4 rounded-xl backdrop-blur-sm border ${
-                        !agent.isAlive
-                          ? "bg-slate-700/30 text-slate-400 border-slate-600/30"
-                          : agent.role === "imposter"
-                          ? "bg-red-900/20 text-red-200 border-red-500/30"
-                          : "bg-emerald-900/20 text-emerald-200 border-emerald-500/30"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="font-medium">{agent.personality.name}</p>
-                        <span
-                          className={`px-2 py-1 rounded-full text-xs ${
-                            agent.role === "imposter"
-                              ? "bg-red-500/20 text-red-300"
-                              : "bg-emerald-500/20 text-emerald-300"
-                          }`}
-                        >
-                          {agent.role}
-                        </span>
-                      </div>
-                      <p className="text-sm mb-2">
-                        {agent.isAlive ? "Alive" : "Dead"}
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        Location: {agent.location}
-                      </p>
-                    </motion.div>
-                  ))}
+                <div
+                  ref={cardsContainerRef}
+                  className="grid grid-cols-2 gap-4 relative"
+                >
+                  {isLoadingCards ? (
+                    <div className="col-span-2 flex justify-center items-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div>
+                    </div>
+                  ) : (
+                    gameState.agents.map((agent, index) => (
+                      <motion.div
+                        key={agent.id}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: index * 0.05 }} // Stagger the animations
+                        className={`p-4 rounded-xl backdrop-blur-sm border ${
+                          !agent.isAlive
+                            ? "bg-slate-700/30 text-slate-400 border-slate-600/30"
+                            : agent.role === "imposter"
+                            ? "bg-red-900/20 text-red-200 border-red-500/30"
+                            : "bg-emerald-900/20 text-emerald-200 border-emerald-500/30"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="font-medium">
+                            {agent.personality.name}
+                          </p>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs ${
+                              agent.role === "imposter"
+                                ? "bg-red-500/20 text-red-300"
+                                : "bg-emerald-500/20 text-emerald-300"
+                            }`}
+                          >
+                            {agent.role}
+                          </span>
+                        </div>
+                        <div className="space-y-2">
+                          <p className="text-sm">
+                            {agent.isAlive ? "Alive" : "Dead"}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            Location: {agent.location}
+                          </p>
+                          {/* Personality Traits */}
+                          <div className="mt-2 space-y-1">
+                            <p className="text-xs font-medium text-blue-300">
+                              Personality Analysis:
+                            </p>
+                            <div className="grid grid-cols-2 gap-1 text-xs">
+                              <div className="bg-slate-800/50 p-1 rounded">
+                                <span className="text-slate-400">Trust:</span>{" "}
+                                <span className="text-emerald-300">
+                                  {(agent.personality.trustLevel * 100).toFixed(
+                                    0
+                                  )}
+                                  %
+                                </span>
+                              </div>
+                              <div className="bg-slate-800/50 p-1 rounded">
+                                <span className="text-slate-400">
+                                  Skepticism:
+                                </span>{" "}
+                                <span className="text-red-300">
+                                  {(
+                                    agent.personality.skepticismLevel * 100
+                                  ).toFixed(0)}
+                                  %
+                                </span>
+                              </div>
+                              <div className="bg-slate-800/50 p-1 rounded">
+                                <span className="text-slate-400">
+                                  Observation:
+                                </span>{" "}
+                                <span className="text-blue-300">
+                                  {(
+                                    agent.personality.observationSkills * 100
+                                  ).toFixed(0)}
+                                  %
+                                </span>
+                              </div>
+                              <div className="bg-slate-800/50 p-1 rounded">
+                                <span className="text-slate-400">Style:</span>{" "}
+                                <span className="text-purple-300">
+                                  {agent.personality.communicationStyle}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          {/* Agent Analysis */}
+                          {agent.isAlive && (
+                            <div className="mt-2">
+                              <p className="text-xs font-medium text-yellow-300">
+                                Latest Analysis:
+                              </p>
+                              <div className="space-y-1 mt-1">
+                                {/* Latest relevant events for this agent */}
+                                {gameLog
+                                  .filter((log) => {
+                                    // Include events where this agent is involved
+                                    return (
+                                      log.includes(
+                                        `💭 ${agent.personality.name}:`
+                                      ) || // Chat messages
+                                      log.includes(
+                                        `🗳️ ${agent.personality.name} voted`
+                                      ) || // Votes
+                                      log.includes(
+                                        `🔪 ${agent.personality.name} eliminated`
+                                      ) || // Kills
+                                      log.includes(
+                                        `✅ ${agent.personality.name} completed`
+                                      ) || // Tasks
+                                      log.includes(
+                                        `🕳️ ${agent.personality.name} was seen using vents`
+                                      ) || // Vent usage
+                                      (log.includes("🗳️") &&
+                                        log.includes(
+                                          `voted for ${agent.personality.name}`
+                                        )) // Being voted for
+                                    );
+                                  })
+                                  .slice(-3) // Show last 3 relevant events
+                                  .map((log, index) => (
+                                    <div
+                                      key={`event-${index}`}
+                                      className={`bg-slate-800/50 p-1 rounded text-xs ${
+                                        log.includes("🔪")
+                                          ? "text-red-300"
+                                          : log.includes("🗳️")
+                                          ? "text-blue-300"
+                                          : log.includes("✅")
+                                          ? "text-emerald-300"
+                                          : log.includes("🕳️")
+                                          ? "text-yellow-300"
+                                          : "text-slate-300"
+                                      }`}
+                                    >
+                                      {log.split("] ")[1]}{" "}
+                                      {/* Remove timestamp */}
+                                    </div>
+                                  ))}
+                                {/* Top suspicions */}
+                                {Array.from(agent.suspicions.entries())
+                                  .sort(([, a], [, b]) => Number(b) - Number(a))
+                                  .slice(0, 3)
+                                  .map(([targetId, suspicion]) => {
+                                    const target = gameState.agents.find(
+                                      (a) => a.id === targetId
+                                    );
+                                    if (!target) return null;
+                                    return (
+                                      <div
+                                        key={targetId}
+                                        className="bg-slate-800/50 p-1 rounded text-xs mt-1"
+                                      >
+                                        <span className="text-slate-400">
+                                          {target.personality.name}:
+                                        </span>{" "}
+                                        <span
+                                          className={`${
+                                            Number(suspicion) > 0.6
+                                              ? "text-red-300"
+                                              : Number(suspicion) > 0.3
+                                              ? "text-yellow-300"
+                                              : "text-emerald-300"
+                                          }`}
+                                        >
+                                          {(Number(suspicion) * 100).toFixed(0)}
+                                          %
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -252,11 +421,16 @@ export default function Home() {
           >
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">
-                Game Log
+                Game Theory Log
               </h2>
-              <span className="px-3 py-1 bg-slate-700/30 rounded-full text-sm text-slate-300">
-                {gameLog.length} entries
-              </span>
+              <div className="flex gap-2">
+                <span className="px-3 py-1 bg-slate-700/30 rounded-full text-sm text-slate-300">
+                  {gameLog.length} entries
+                </span>
+                <span className="px-3 py-1 bg-blue-500/20 rounded-full text-sm text-blue-300">
+                  Round {gameState.currentRound}
+                </span>
+              </div>
             </div>
             <div
               ref={gameLogRef}
@@ -267,17 +441,41 @@ export default function Home() {
                   <p className="text-slate-400 italic">No game events yet...</p>
                 </div>
               ) : (
-                gameLog.map((log, index) => (
-                  <motion.p
-                    key={`${index}-${log}`}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="text-sm p-3 rounded-lg bg-slate-700/30 border border-slate-600/30"
-                  >
-                    {log}
-                  </motion.p>
-                ))
+                gameLog.map((log, index) => {
+                  // Determine the type of log entry for styling
+                  const isVote = log.includes("🗳️");
+                  const isKill = log.includes("🔪");
+                  const isTask = log.includes("✅");
+                  const isMeeting = log.includes("📢");
+                  const isChat = log.includes("💭");
+                  const isVent = log.includes("🕳️");
+
+                  return (
+                    <motion.p
+                      key={`${index}-${log}`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: Math.min(index * 0.02, 0.5) }} // Cap the delay at 0.5s
+                      className={`text-sm p-3 rounded-lg border ${
+                        isVote
+                          ? "bg-blue-900/20 border-blue-500/30"
+                          : isKill
+                          ? "bg-red-900/20 border-red-500/30"
+                          : isTask
+                          ? "bg-emerald-900/20 border-emerald-500/30"
+                          : isMeeting
+                          ? "bg-purple-900/20 border-purple-500/30"
+                          : isChat
+                          ? "bg-slate-900/20 border-slate-500/30"
+                          : isVent
+                          ? "bg-yellow-900/20 border-yellow-500/30"
+                          : "bg-slate-700/30 border-slate-600/30"
+                      }`}
+                    >
+                      {log}
+                    </motion.p>
+                  );
+                })
               )}
             </div>
           </motion.div>

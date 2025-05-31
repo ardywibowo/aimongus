@@ -126,6 +126,23 @@ io.on("connection", (socket) => {
       clearInterval(gameInterval);
       gameInterval = null;
       console.log("Game loop stopped by user request");
+
+      // Update game state to reflect stopped state
+      const currentState = gameManager.getGameState();
+      currentState.phase = "day"; // Reset to day phase
+
+      // Add a game stopped event
+      currentState.events.push({
+        type: "meeting_called",
+        timestamp: Date.now(),
+        location: "Ship",
+        agentId: "system",
+        details: "Game stopped by user request.",
+      });
+
+      // Send updated state to all clients
+      io.emit("gameState", currentState);
+      io.emit("gameLog", gameManager.getGameLog());
     }
   });
 

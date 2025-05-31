@@ -14,6 +14,49 @@ export async function getAIMove(
   agent: Agent,
   gameState: GameState
 ): Promise<string> {
+  // Calculate suspicions for all agents
+  for (const otherAgent of gameState.agents) {
+    if (otherAgent.id !== agent.id) {
+      let suspicion = 0;
+      const personality = agent.personality;
+
+      // Analyze events involving the target
+      const relevantEvents = gameState.events.filter(
+        (event) =>
+          event.agentId === otherAgent.id || event.targetId === otherAgent.id
+      );
+
+      // Check for suspicious behavior
+      for (const event of relevantEvents) {
+        switch (event.type) {
+          case "vent_use":
+            suspicion += 10;
+            break;
+          case "kill":
+            if (event.agentId === otherAgent.id) {
+              suspicion += 1.0;
+            }
+            break;
+          case "task_complete":
+            suspicion -= 0.2; // Completing tasks reduces suspicion
+            break;
+        }
+      }
+
+      // Consider personality traits
+      suspicion *= 1 + personality.skepticismLevel;
+
+      // Consider trust level
+      if (agent.suspicions.has(otherAgent.id)) {
+        const previousSuspicion = agent.suspicions.get(otherAgent.id) || 0;
+        suspicion = (suspicion + previousSuspicion) / 2;
+      }
+
+      // Update suspicion in the Map
+      agent.suspicions.set(otherAgent.id, Math.min(Math.max(suspicion, 0), 1));
+    }
+  }
+
   // Check if we're in an emergency meeting
   const isEmergencyMeeting =
     gameState.phase === "voting" || gameState.phase === "discussion";
