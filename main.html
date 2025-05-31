@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>AI Town</title>
+<style>
+  body { margin:0; background:#222; display:flex; height:100vh; align-items:center; justify-content:center; }
+  canvas { background:#f5f5f5; border:4px solid #444; border-radius:12px; }
+  @font-face { font-family:"Inter"; src:url("https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap"); }
+</style>
+</head>
+<body>
+<canvas id="town"></canvas>
+
+<script>
+/* ---------- Game constants ---------- */
+const WIDTH = 800, HEIGHT = 500;
+const N_AGENTS = 12;
+const SPEED = 0.8;               // pixels per frame
+const TALK_DISTANCE = 24;        // start conversation when closer than this
+const TALK_DURATION = 180;       // frames (≈3 s at 60 fps)
+const NAMES = ["Ada","Bo","Cleo","Dex","Echo","Fia","Gus","Hex","Ivy","Jax","Kia","Lux"];
+
+/* ---------- Utility ---------- */
+function rand(min,max) { return Math.random()*(max-min)+min; }
+function pick(array) { return array[Math.floor(Math.random()*array.length)]; }
+
+/* ---------- Agent class ---------- */
+class Agent {
+  constructor(id) {
+    this.id = id;
+    this.name = pick(NAMES);
+    this.x = rand(40, WIDTH-40);
+    this.y = rand(40, HEIGHT-40);
+    this.vx = rand(-1,1); this.vy = rand(-1,1);
+    this.color = `hsl(${rand(0,360)},70%,60%)`;
+    this.state = "walking";  // walking | chatting
+    this.talkTimer = 0;
+    this.message = "";
+  }
+  step(agents){
+    // Movement
+    if(this.state === "walking"){
+      this.x += this.vx * SPEED;
+      this.y += this.vy * SPEED;
+      // bounce at edges
+      if(this.x<20||this.x>WIDTH-20) this.vx*=-1;
+      if(this.y<20||this.y>HEIGHT-20) this.vy*=-1;
+      // look for someone to talk to
+      for(const other of agents){
+        if(other!==this && other.state==="walking"){
+          const dx=this.x-other.x, dy=this.y-other.y;
+          if(Math.hypot(dx,dy) < TALK_DISTANCE){
+            this.startChat(other);
+            other.startChat(this);
+            break;
+          }
+        }
+      }
+    } else if(this.state==="chatting"){
+      this.talkTimer--;
+      if(this.talkTimer<=0){ this.state="walking"; }
+    }
+  }
+  startChat(other){
+    this.state = "chatting";
+    this.talkTimer = TALK_DURATION;
+    const greetings = ["Hi","Hello","Yo","Hey","Howdy","Greetings","Salutations"];
+    this.message = `${pick(greetings)}, ${other.name}!`;
+  }
+  draw(ctx){
+    // body
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, 12, 0, Math.PI*2);
+    ctx.fill();
+    // name label
+    ctx.fillStyle="#000"; ctx.font="12px Inter";
+    ctx.textAlign="center";
+    ctx.fillText(this.name, this.x, this.y-16);
+    // chat bubble
+    if(this.state==="chatting"){
+      ctx.font="11px Inter"; const padding=6;
+      const textW = ctx.measureText(this.message).width;
+      const bw = textW + padding*2, bh = 20;
+      const bx = this.x - bw/2, by = this.y - 40;
+      // bubble box
+      ctx.fillStyle="#fff";
+      ctx.roundRect(bx, by, bw, bh, 8); ctx.fill();
+      ctx.strokeStyle="#333"; ctx.stroke();
+      // text
+      ctx.fillStyle="#000";
+      ctx.fillText(this.message, this.x, by+14);
+    }
+  }
+}
+
+/* ---------- Polyfill: roundRect for older browsers ---------- */
+if(!CanvasRenderingContext2D.prototype.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+    this.beginPath();
+    this.moveTo(x+r,y);
+    this.lineTo(x+w-r,y); this.quadraticCurveTo(x+w,y,x+w,y+r);
+    this.lineTo(x+w,y+h-r); this.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    this.lineTo(x+r,y+h); this.quadraticCurveTo(x,y+h,x,y+h-r);
+    this.lineTo(x,y+r); this.quadraticCurveTo(x,y,x+r,y); };
+}
+
+/* ---------- Boot ---------- */
+const canvas=document.getElementById("town");
+canvas.width=WIDTH; canvas.height=HEIGHT;
+const ctx=canvas.getContext("2d");
+const agents=[...Array(N_AGENTS)].map((_,i)=>new Agent(i));
+
+function loop(){
+  ctx.clearRect(0,0,WIDTH,HEIGHT);
+  // city background (simple grid)
+  ctx.strokeStyle="#ddd"; ctx.lineWidth=1;
+  for(let x=50;x<WIDTH;x+=50){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,HEIGHT); ctx.stroke(); }
+  for(let y=50;y<HEIGHT;y+=50){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(WIDTH,y); ctx.stroke(); }
+  // agents
+  for(const a of agents){ a.step(agents); a.draw(ctx); }
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
