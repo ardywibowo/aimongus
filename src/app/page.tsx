@@ -15,13 +15,15 @@ const ExpandableEntry = ({ content, type }: ExpandableEntryProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const maxLength = 50; // Max characters before showing expand
   const needsTruncation = content.length > maxLength;
-  const displayText = isExpanded ? content : `${content.substring(0, maxLength)}${needsTruncation ? '...' : ''}`;
+  const displayText = isExpanded
+    ? content
+    : `${content.substring(0, maxLength)}${needsTruncation ? "..." : ""}`;
   const iconMap = {
     "🔪": "Elimination",
     "🗳️": "Vote",
     "✅": "Task",
     "🕳️": "Vent Usage",
-    "💭": "Chat"
+    "💭": "Chat",
   };
 
   return (
@@ -47,12 +49,16 @@ const ExpandableEntry = ({ content, type }: ExpandableEntryProps) => {
       <div className="flex items-start gap-2">
         <span className="flex-shrink-0 text-slate-400">{type} •</span>
         <div className="flex-1">
-          <div className={`whitespace-pre-wrap break-words ${!isExpanded ? 'line-clamp-1' : ''}`}>
+          <div
+            className={`whitespace-pre-wrap break-words ${
+              !isExpanded ? "line-clamp-1" : ""
+            }`}
+          >
             {displayText}
           </div>
           {needsTruncation && (
             <div className="text-xs mt-1 text-slate-400">
-              {isExpanded ? 'Click to collapse' : 'Click to expand'}
+              {isExpanded ? "Click to collapse" : "Click to expand"}
             </div>
           )}
         </div>
@@ -263,13 +269,18 @@ export default function Home() {
 
               <div className="bg-slate-700/30 p-4 rounded-xl">
                 <p className="text-slate-400 text-sm">Status</p>
-                <p
-                  className={`text-xl font-bold ${
-                    gameState.gameOver ? "text-red-400" : "text-emerald-400"
-                  }`}
-                >
-                  {gameState.gameOver ? "Game Over" : "In Progress"}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p
+                    className={`text-xl font-bold ${
+                      gameState.gameOver ? "text-red-400" : "text-emerald-400"
+                    }`}
+                  >
+                    {gameState.gameOver ? "Game Over" : "In Progress"}
+                  </p>
+                  {!gameState.gameOver && (
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-emerald-400 border-t-transparent"></div>
+                  )}
+                </div>
                 {gameState.winner && (
                   <p className="text-lg font-semibold text-emerald-400 mt-2">
                     Winner:{" "}
@@ -296,24 +307,24 @@ export default function Home() {
                         key={agent.id}
                         layout
                         initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                        animate={{ 
-                          opacity: 1, 
-                          scale: 1, 
+                        animate={{
+                          opacity: 1,
+                          scale: 1,
                           y: 0,
-                          transition: { 
+                          transition: {
                             duration: 0.3,
-                            delay: index * 0.03 
-                          } 
+                            delay: index * 0.03,
+                          },
                         }}
-                        whileHover={{ 
+                        whileHover={{
                           scale: 1.02,
-                          transition: { duration: 0.2 }
+                          transition: { duration: 0.2 },
                         }}
                         transition={{
                           type: "spring",
                           damping: 25,
                           stiffness: 300,
-                          mass: 0.8
+                          mass: 0.8,
                         }}
                         className={`p-4 rounded-xl backdrop-blur-sm border transition-all duration-300 ${
                           !agent.isAlive
@@ -431,14 +442,14 @@ export default function Home() {
                                       else if (log.includes("🗳️")) type = "🗳️";
                                       else if (log.includes("✅")) type = "✅";
                                       else if (log.includes("🕳️")) type = "🕳️";
-                                      
+
                                       const content = log.split("] ")[1] || "";
-                                      
+
                                       return (
-                                        <ExpandableEntry 
-                                          key={`${log}-${index}`} 
-                                          content={content} 
-                                          type={type} 
+                                        <ExpandableEntry
+                                          key={`${log}-${index}`}
+                                          content={content}
+                                          type={type}
                                         />
                                       );
                                     })}
@@ -512,12 +523,14 @@ export default function Home() {
             >
               <AnimatePresence initial={false}>
                 {gameLog.length === 0 ? (
-                  <motion.div 
+                  <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="text-center py-8"
                   >
-                    <p className="text-slate-400 italic">No game events yet...</p>
+                    <p className="text-slate-400 italic">
+                      No game events yet...
+                    </p>
                   </motion.div>
                 ) : (
                   gameLog.map((log, index) => {
@@ -534,18 +547,18 @@ export default function Home() {
                         key={`${Date.now()}-${index}`}
                         layout
                         initial={{ opacity: 0, y: 10, scale: 0.98 }}
-                        animate={{ 
-                          opacity: 1, 
-                          y: 0, 
+                        animate={{
+                          opacity: 1,
+                          y: 0,
                           scale: 1,
-                          transition: { duration: 0.3 }
+                          transition: { duration: 0.3 },
                         }}
                         exit={{ opacity: 0, x: -20, scale: 0.98 }}
                         transition={{
                           type: "spring",
                           damping: 25,
                           stiffness: 300,
-                          mass: 0.8
+                          mass: 0.8,
                         }}
                         className={`text-sm p-3 rounded-lg border ${
                           isVote
