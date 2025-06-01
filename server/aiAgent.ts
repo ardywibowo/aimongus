@@ -1,6 +1,6 @@
 import "dotenv/config";
 import OpenAI from "openai";
-import { Agent, GameState } from "../src/types/game";
+import { Agent, GameState, GameEvent } from "../src/types/game";
 
 console.log("Environment variables:", {
   hasOpenAIKey: !!process.env.OPENAI_API_KEY,
@@ -9,6 +9,108 @@ console.log("Environment variables:", {
 });
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+interface AgentAnalysis {
+  name: string;
+  suspicion: number;
+  suspiciousBehaviors: number;
+  taskCompletions: number;
+  trustScore: number;
+  recentEvents: Array<{
+    type: string;
+    actor?: string;
+    target?: string;
+    location: string;
+    details?: string;
+    timestamp: number;
+  }>;
+}
+
+async function generateDiscussionResponse(
+  agent: Agent,
+  gameState: GameState,
+  recentEvents: GameEvent[],
+  agentAnalyses: AgentAnalysis[]
+): Promise<string> {
+  try {
+    // Format recent events for context
+    const formattedEvents = recentEvents
+      .map(event => {
+        const actor = gameState.agents.find(a => a.id === event.agentId);
+        const target = event.targetId ? gameState.agents.find(a => a.id === event.targetId) : null;
+        let eventText = `[${new Date(event.timestamp).toLocaleTimeString()}] `;
+        
+        switch (event.type) {
+          case 'kill':
+            eventText += `🔪 ${actor?.personality.name} eliminated ${target?.personality.name}`;
+            break;
+          case 'vent_use':
+            eventText += `🕳️ ${actor?.personality.name} used vents in ${event.location}`;
+            break;
+          case 'task_complete':
+            eventText += `✅ ${actor?.personality.name} completed a task in ${event.location}`;
+            break;
+          case 'chat':
+            eventText += `💭 ${actor?.personality.name}: ${event.details}`;
+            break;
+          case 'vote':
+            eventText += `🗳️ ${actor?.personality.name} voted to eject ${target?.personality.name}`;
+            break;
+          default:
+            eventText += event.details || 'Something happened';
+        }
+        return eventText;
+      })
+      .join('\n');
+
+    // Format agent analyses for context
+    const formattedAnalyses = agentAnalyses
+      .slice(0, 3) // Top 3 most suspicious
+      .map((analysis, index) => 
+        `${index + 1}. ${analysis.name} (Suspicion: ${Math.round(analysis.trustScore * 100)}%): ` +
+        `${analysis.suspiciousBehaviors} suspicious behaviors, ${analysis.taskCompletions} tasks completed`
+      )
+      .join('\n');
+
+    const prompt = `You are ${agent.personality.name} in an Among Us game. Your role is ${agent.role}.
+
+Recent events in the game:
+${formattedEvents}
+
+Current suspicions (lower % means more suspicious):
+${formattedAnalyses}
+
+Your personality:
+- Trust level: ${Math.round(agent.personality.trustLevel * 100)}%
+- Skepticism level: ${Math.round(agent.personality.skepticismLevel * 100)}%
+- Communication style: ${agent.personality.communicationStyle}
+
+It's discussion time. Share your thoughts on who might be the imposter based on the evidence. ` +
+    `Be concise but provide reasoning. If you're not sure, say so. ` +
+    `Mention specific behaviors you find suspicious.\n\n` +
+    `${agent.personality.name}:`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        { 
+          role: "system", 
+          content: "You are participating in a discussion to find the imposter. " +
+                  "Be observant, logical, and consider all possibilities. " +
+                  "Your responses should be 1-2 sentences max."
+        },
+        { role: "user", content: prompt },
+      ],
+      max_tokens: 100,
+      temperature: 0.8,
+    });
+
+    return response.choices[0]?.message?.content?.trim() || "I'm not sure what to think yet.";
+  } catch (error) {
+    console.error("Error generating discussion response:", error);
+    return "I'm still thinking about what happened...";
+  }
+}
 
 export async function getAIMove(
   agent: Agent,
@@ -61,35 +163,139 @@ export async function getAIMove(
   const isEmergencyMeeting =
     gameState.phase === "voting" || gameState.phase === "discussion";
 
-  // During emergency meetings, we MUST vote
+  // During emergency meetings, we'll use OpenAI to generate more natural discussions and voting decisions
   if (isEmergencyMeeting) {
-    // Find the most suspicious agent
-    let mostSuspicious: Agent | null = null;
-    let highestSuspicion = -1; // Start at -1 to ensure we pick someone even with 0 suspicion
+    // Get recent events for context (last 15 events or all if fewer)
+    const recentEvents = gameState.events
+      .slice(-15)
+      .filter(e => e.timestamp > Date.now() - 300000); // Only last 5 minutes
 
-    for (const [agentId, suspicion] of agent.suspicions) {
-      const target = gameState.agents.find((a) => a.id === agentId);
-      if (target && target.isAlive && target.id !== agent.id) {
-        if (suspicion > highestSuspicion) {
-          mostSuspicious = target;
-          highestSuspicion = suspicion;
-        }
+    // Format events for analysis
+    const formattedRecentEvents = recentEvents.map(e => {
+      const actor = gameState.agents.find(a => a.id === e.agentId);
+      const target = e.targetId ? gameState.agents.find(a => a.id === e.targetId) : null;
+      return {
+        type: e.type,
+        actor: actor?.personality.name,
+        target: target?.personality.name,
+        location: e.location,
+        details: e.details,
+        timestamp: e.timestamp
+      };
+    });
+
+    // Get list of alive agents (excluding self)
+    const aliveAgents = gameState.agents.filter(a => a.isAlive && a.id !== agent.id);
+
+    // Analyze each agent's behavior
+    const agentAnalyses: AgentAnalysis[] = aliveAgents.map(target => {
+      const suspicion = agent.suspicions.get(target.id) || 0;
+      const eventsInvolving = formattedRecentEvents.filter(
+        e => e.actor === target.personality.name || e.target === target.personality.name
+      );
+      
+      // Count suspicious behaviors
+      const suspiciousBehaviors = eventsInvolving.filter(e => 
+        e.type === 'vent_use' || 
+        (e.type === 'kill' && e.actor === target.personality.name)
+      ).length;
+
+      // Count task completions (reduces suspicion)
+      const taskCompletions = eventsInvolving.filter(e => 
+        e.type === 'task_complete' && e.actor === target.personality.name
+      ).length;
+
+      // Calculate trust score (lower is more suspicious)
+      const trustScore = Math.max(0.1, 1 - (suspicion * 0.8 + suspiciousBehaviors * 0.1 - taskCompletions * 0.05));
+      
+      return {
+        name: target.personality.name,
+        suspicion,
+        suspiciousBehaviors,
+        taskCompletions,
+        trustScore,
+        recentEvents: eventsInvolving
+      };
+    });
+
+    // Sort by trust score (ascending - most suspicious first)
+    agentAnalyses.sort((a, b) => a.trustScore - b.trustScore);
+
+    // If in discussion phase, generate a discussion response
+    if (gameState.phase === 'discussion') {
+      return await generateDiscussionResponse(agent, gameState, recentEvents, agentAnalyses);
+    }
+    
+    // In voting phase, make a final decision using AI
+    if (agentAnalyses.length > 0) {
+      try {
+        // Format the prompt for the voting decision
+        const topSuspects = agentAnalyses.slice(0, 3);
+        const prompt = `You are ${agent.personality.name} in an Among Us game. It's time to vote. Here's what you know:
+
+Top suspicious players:
+${topSuspects.map((suspect, i) => 
+  `${i + 1}. ${suspect.name} (Suspicion: ${Math.round(suspect.trustScore * 100)}%): ` +
+  `${suspect.suspiciousBehaviors} suspicious behaviors, ${suspect.taskCompletions} tasks completed`
+).join('\n')}
+
+Recent events:
+${recentEvents
+  .slice(-5)
+  .map(e => {
+    const actor = gameState.agents.find(a => a.id === e.agentId);
+    const targetAgent = e.targetId ? gameState.agents.find(a => a.id === e.targetId) : null;
+    const actorName = actor?.personality.name || 'Someone';
+    const targetName = targetAgent?.personality.name || 'someone';
+    
+    switch(e.type) {
+      case 'kill':
+        return `- ${actorName} eliminated ${targetName} in ${e.location}`;
+      case 'vent_use':
+        return `- ${actorName} was seen using vents in ${e.location}`;
+      case 'task_complete':
+        return `- ${actorName} completed a task in ${e.location}`;
+      case 'chat':
+        return `- ${actorName} said: "${e.details}"`;
+      default:
+        return `- ${e.details || 'Something happened'}`;
+    }
+  })
+  .join('\n')}
+
+Your personality:
+- Trust level: ${Math.round(agent.personality.trustLevel * 100)}%
+- Skepticism level: ${Math.round(agent.personality.skepticismLevel * 100)}%
+- Communication style: ${agent.personality.communicationStyle}
+
+It's time to vote. You can:
+1. Vote to eject someone (name them specifically)
+2. Skip voting if you're not sure
+
+${agent.personality.name}: I`;
+
+        const response = await openai.chat.completions.create({
+          model: "gpt-3.5-turbo",
+          messages: [
+            {
+              role: "system",
+              content: "You are voting in an Among Us game. Be decisive but thoughtful. " +
+                      "If you're not sure, it's okay to skip. Keep your response to 1-2 sentences max."
+            },
+            { role: "user", content: prompt },
+          ],
+          max_tokens: 100,
+          temperature: 0.7,
+        });
+
+        const decision = response.choices[0]?.message?.content?.trim() || 
+          `I'm not sure who to vote for. I choose to skip.`;
+        
+        return decision;
+      } catch (error) {
+        console.error("Error generating vote decision:", error);
+        return "I need more time to think about this...";
       }
-    }
-
-    // If we found any agent (even with 0 suspicion), vote for them
-    if (mostSuspicious) {
-      return `vote for ${mostSuspicious.personality.name} because they have the highest suspicion level`;
-    }
-
-    // If somehow no agents are found (shouldn't happen), pick a random alive agent
-    const aliveAgents = gameState.agents.filter(
-      (a) => a.isAlive && a.id !== agent.id
-    );
-    if (aliveAgents.length > 0) {
-      const randomTarget =
-        aliveAgents[Math.floor(Math.random() * aliveAgents.length)];
-      return `vote for ${randomTarget.personality.name} because I need to make a decision`;
     }
   }
 

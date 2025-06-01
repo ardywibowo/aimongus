@@ -142,19 +142,31 @@ export class GameManager {
         attempts++;
         const aiMove = await getAIMove(agent, this.gameState);
         console.log(`Agent ${agent.personality.name} (${agent.role}) move:`, aiMove);
-        
+
         // Try to parse different vote formats
         let targetName = "";
         let reason = "";
-        
+
+        // Check for skip vote first
+        if (aiMove.toLowerCase().includes("skip") || aiMove.toLowerCase().includes("no vote")) {
+          console.log(`Agent ${agent.personality.name} chose to skip voting`);
+          votes.push({
+            voterId: agent.id,
+            reason: "Not enough evidence to vote for anyone",
+            skipped: true,
+          });
+          voted = true;
+          continue;
+        }
+
         // Format 1: "vote for X because Y"
         let match = aiMove.match(/vote (?:for|to eject|to vote for) ([^\s,.]+)(?: because |: | - |\n)([\s\S]*)/i);
-        
+
         // Format 2: "I vote for X because Y"
         if (!match) {
           match = aiMove.match(/(?:I )?(?:will )?vote (?:for|to eject|to vote for) ([^\s,.]+)(?: because |: | - |\n)?([\s\S]*)/i);
         }
-        
+
         // Format 3: Just the target name
         if (!match) {
           // Try to find any agent name in the response
@@ -196,6 +208,7 @@ export class GameManager {
               voterId: agent.id,
               targetId: target.id,
               reason: voteReason,
+              skipped: false,
             });
             
             this.addEvent({
@@ -228,6 +241,7 @@ export class GameManager {
             voterId: agent.id,
             targetId: randomTarget.id,
             reason: defaultReason,
+            skipped: false,
           });
           
           this.addEvent({
@@ -288,10 +302,29 @@ export class GameManager {
 
   private processVotes(votes: Vote[]): string | null {
     const voteCount = new Map<string, number>();
+    let skipVotes = 0;
 
     for (const vote of votes) {
-      const currentCount = voteCount.get(vote.targetId) || 0;
-      voteCount.set(vote.targetId, currentCount + 1);
+      if (vote.skipped) {
+        skipVotes++;
+        continue;
+      }
+      if (vote.targetId) {
+        const currentCount = voteCount.get(vote.targetId) || 0;
+        voteCount.set(vote.targetId, currentCount + 1);
+      }
+    }
+
+    // If more than half of the players skipped, no one is ejected
+    if (skipVotes > votes.length / 2) {
+      this.addEvent({
+        type: 'vote',
+        timestamp: Date.now(),
+        location: 'Meeting Room',
+        agentId: 'system',
+        details: 'The majority chose to skip voting. No one was ejected!',
+      });
+      return null;
     }
 
     let maxVotes = 0;
@@ -301,6 +334,9 @@ export class GameManager {
       if (count > maxVotes) {
         maxVotes = count;
         ejectedAgentId = agentId;
+      } else if (count === maxVotes) {
+        // In case of a tie, no one is ejected
+        ejectedAgentId = null;
       }
     }
 
@@ -512,22 +548,31 @@ export class GameManager {
           }
         }
 
-        // Always make a statement about the most suspicious person
+        // Use AI to generate a voting statement
         let statement: string;
-        if (mostSuspicious) {
-          statement = `I'm voting for ${
-            mostSuspicious.personality.name
-          } because they have the highest suspicion level (${(
-            highestSuspicion * 100
-          ).toFixed(0)}%)`;
-        } else {
-          // If somehow no agents are found (shouldn't happen), pick a random alive agent
-          const aliveAgents = this.gameState.agents.filter(
-            (a) => a.isAlive && a.id !== agent.id
-          );
-          const randomTarget =
-            aliveAgents[Math.floor(Math.random() * aliveAgents.length)];
-          statement = `I'm voting for ${randomTarget.personality.name} because I need to make a decision`;
+        try {
+          // Get AI's voting decision
+          const aiResponse = await getAIMove(agent, this.gameState);
+          
+          // Clean up the response to ensure it's a proper voting statement
+          if (aiResponse.toLowerCase().includes('skip') || aiResponse.toLowerCase().includes('not sure')) {
+            statement = aiResponse;
+          } else if (aiResponse.toLowerCase().includes('vote for')) {
+            statement = aiResponse;
+          } else if (mostSuspicious) {
+            // Fallback if AI response doesn't specify a vote
+            statement = `${aiResponse} I'm voting for ${mostSuspicious.personality.name}.`;
+          } else {
+            statement = aiResponse;
+          }
+        } catch (error) {
+          console.error('Error getting AI vote:', error);
+          // Fallback to simple statement if AI fails
+          if (mostSuspicious) {
+            statement = `I think ${mostSuspicious.personality.name} is suspicious.`;
+          } else {
+            statement = "I'm not sure who to vote for.";
+          }
         }
 
         this.addEvent({
@@ -545,7 +590,7 @@ export class GameManager {
     const votes = await this.runVotingPhase();
     const ejectedAgentId = this.processVotes(votes);
 
-    // Announce who was voted out
+    // Announce voting results
     if (ejectedAgentId) {
       const agent = this.gameState.agents.find((a) => a.id === ejectedAgentId);
       if (agent) {
@@ -557,6 +602,14 @@ export class GameManager {
           details: `${agent.personality.name} was voted out and was a ${agent.role}!`,
         });
       }
+    } else {
+      this.addEvent({
+        type: "chat",
+        timestamp: Date.now(),
+        location: "Meeting Room",
+        agentId: "system",
+        details: "No one received enough votes to be ejected.",
+      });
     }
 
     // Check if game is over after voting

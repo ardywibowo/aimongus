@@ -45,6 +45,7 @@ export type GameState = {
 
 export type Vote = {
   voterId: string;
-  targetId: string;
+  targetId?: string; // Optional for skip votes
   reason: string;
+  skipped: boolean; // True if this is a skip vote
 };

@@ -4,7 +4,62 @@ import { useEffect, useState, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { GameState, Agent } from "../types/game";
 import GameMap from "../components/GameMap";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+
+interface ExpandableEntryProps {
+  content: string;
+  type: string;
+}
+
+const ExpandableEntry = ({ content, type }: ExpandableEntryProps) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const maxLength = 50; // Max characters before showing expand
+  const needsTruncation = content.length > maxLength;
+  const displayText = isExpanded ? content : `${content.substring(0, maxLength)}${needsTruncation ? '...' : ''}`;
+  const iconMap = {
+    "🔪": "Elimination",
+    "🗳️": "Vote",
+    "✅": "Task",
+    "🕳️": "Vent Usage",
+    "💭": "Chat"
+  };
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      transition={{ duration: 0.2 }}
+      className={`bg-slate-800/50 p-2 rounded text-xs mb-1 cursor-pointer transition-all duration-200 hover:bg-slate-700/50 ${
+        type === "🔪"
+          ? "text-red-300"
+          : type === "🗳️"
+          ? "text-blue-300"
+          : type === "✅"
+          ? "text-emerald-300"
+          : type === "🕳️"
+          ? "text-yellow-300"
+          : "text-slate-300"
+      }`}
+      onClick={() => needsTruncation && setIsExpanded(!isExpanded)}
+    >
+      <div className="flex items-start gap-2">
+        <span className="flex-shrink-0 text-slate-400">{type} •</span>
+        <div className="flex-1">
+          <div className={`whitespace-pre-wrap break-words ${!isExpanded ? 'line-clamp-1' : ''}`}>
+            {displayText}
+          </div>
+          {needsTruncation && (
+            <div className="text-xs mt-1 text-slate-400">
+              {isExpanded ? 'Click to collapse' : 'Click to expand'}
+            </div>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+};
 
 export default function Home() {
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -239,15 +294,33 @@ export default function Home() {
                     gameState.agents.map((agent, index) => (
                       <motion.div
                         key={agent.id}
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: index * 0.05 }} // Stagger the animations
-                        className={`p-4 rounded-xl backdrop-blur-sm border ${
+                        layout
+                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                        animate={{ 
+                          opacity: 1, 
+                          scale: 1, 
+                          y: 0,
+                          transition: { 
+                            duration: 0.3,
+                            delay: index * 0.03 
+                          } 
+                        }}
+                        whileHover={{ 
+                          scale: 1.02,
+                          transition: { duration: 0.2 }
+                        }}
+                        transition={{
+                          type: "spring",
+                          damping: 25,
+                          stiffness: 300,
+                          mass: 0.8
+                        }}
+                        className={`p-4 rounded-xl backdrop-blur-sm border transition-all duration-300 ${
                           !agent.isAlive
                             ? "bg-slate-700/30 text-slate-400 border-slate-600/30"
                             : agent.role === "imposter"
-                            ? "bg-red-900/20 text-red-200 border-red-500/30"
-                            : "bg-emerald-900/20 text-emerald-200 border-emerald-500/30"
+                            ? "bg-red-900/20 text-red-200 border-red-500/30 hover:bg-red-900/30"
+                            : "bg-emerald-900/20 text-emerald-200 border-emerald-500/30 hover:bg-emerald-900/30"
                         }`}
                       >
                         <div className="flex items-center justify-between mb-2">
@@ -324,51 +397,52 @@ export default function Home() {
                               </p>
                               <div className="space-y-1 mt-1">
                                 {/* Latest relevant events for this agent */}
-                                {gameLog
-                                  .filter((log) => {
-                                    // Include events where this agent is involved
-                                    return (
-                                      log.includes(
-                                        `💭 ${agent.personality.name}:`
-                                      ) || // Chat messages
-                                      log.includes(
-                                        `🗳️ ${agent.personality.name} voted`
-                                      ) || // Votes
-                                      log.includes(
-                                        `🔪 ${agent.personality.name} eliminated`
-                                      ) || // Kills
-                                      log.includes(
-                                        `✅ ${agent.personality.name} completed`
-                                      ) || // Tasks
-                                      log.includes(
-                                        `🕳️ ${agent.personality.name} was seen using vents`
-                                      ) || // Vent usage
-                                      (log.includes("🗳️") &&
+                                <AnimatePresence>
+                                  {gameLog
+                                    .filter((log) => {
+                                      // Include events where this agent is involved
+                                      return (
                                         log.includes(
-                                          `voted for ${agent.personality.name}`
-                                        )) // Being voted for
-                                    );
-                                  })
-                                  .slice(-3) // Show last 3 relevant events
-                                  .map((log, index) => (
-                                    <div
-                                      key={`event-${index}`}
-                                      className={`bg-slate-800/50 p-1 rounded text-xs ${
-                                        log.includes("🔪")
-                                          ? "text-red-300"
-                                          : log.includes("🗳️")
-                                          ? "text-blue-300"
-                                          : log.includes("✅")
-                                          ? "text-emerald-300"
-                                          : log.includes("🕳️")
-                                          ? "text-yellow-300"
-                                          : "text-slate-300"
-                                      }`}
-                                    >
-                                      {log.split("] ")[1]}{" "}
-                                      {/* Remove timestamp */}
-                                    </div>
-                                  ))}
+                                          `💭 ${agent.personality.name}:`
+                                        ) || // Chat messages
+                                        log.includes(
+                                          `🗳️ ${agent.personality.name} voted`
+                                        ) || // Votes
+                                        log.includes(
+                                          `🔪 ${agent.personality.name} eliminated`
+                                        ) || // Kills
+                                        log.includes(
+                                          `✅ ${agent.personality.name} completed`
+                                        ) || // Tasks
+                                        log.includes(
+                                          `🕳️ ${agent.personality.name} was seen using vents`
+                                        ) || // Vent usage
+                                        (log.includes("🗳️") &&
+                                          log.includes(
+                                            `voted for ${agent.personality.name}`
+                                          )) // Being voted for
+                                      );
+                                    })
+                                    .slice(-3) // Show last 3 relevant events
+                                    .map((log, index) => {
+                                      // Determine the type of entry
+                                      let type = "";
+                                      if (log.includes("🔪")) type = "🔪";
+                                      else if (log.includes("🗳️")) type = "🗳️";
+                                      else if (log.includes("✅")) type = "✅";
+                                      else if (log.includes("🕳️")) type = "🕳️";
+                                      
+                                      const content = log.split("] ")[1] || "";
+                                      
+                                      return (
+                                        <ExpandableEntry 
+                                          key={`${log}-${index}`} 
+                                          content={content} 
+                                          type={type} 
+                                        />
+                                      );
+                                    })}
+                                </AnimatePresence>
                                 {/* Top suspicions */}
                                 {Array.from(agent.suspicions.entries())
                                   .sort(([, a], [, b]) => Number(b) - Number(a))
@@ -436,47 +510,65 @@ export default function Home() {
               ref={gameLogRef}
               className="h-[600px] overflow-y-auto space-y-3 pr-4 custom-scrollbar"
             >
-              {gameLog.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-slate-400 italic">No game events yet...</p>
-                </div>
-              ) : (
-                gameLog.map((log, index) => {
-                  // Determine the type of log entry for styling
-                  const isVote = log.includes("🗳️");
-                  const isKill = log.includes("🔪");
-                  const isTask = log.includes("✅");
-                  const isMeeting = log.includes("📢");
-                  const isChat = log.includes("💭");
-                  const isVent = log.includes("🕳️");
+              <AnimatePresence initial={false}>
+                {gameLog.length === 0 ? (
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="text-center py-8"
+                  >
+                    <p className="text-slate-400 italic">No game events yet...</p>
+                  </motion.div>
+                ) : (
+                  gameLog.map((log, index) => {
+                    // Determine the type of log entry for styling
+                    const isVote = log.includes("🗳️");
+                    const isKill = log.includes("🔪");
+                    const isTask = log.includes("✅");
+                    const isMeeting = log.includes("📢");
+                    const isChat = log.includes("💭");
+                    const isVent = log.includes("🕳️");
 
-                  return (
-                    <motion.p
-                      key={`${index}-${log}`}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: Math.min(index * 0.02, 0.5) }} // Cap the delay at 0.5s
-                      className={`text-sm p-3 rounded-lg border ${
-                        isVote
-                          ? "bg-blue-900/20 border-blue-500/30"
-                          : isKill
-                          ? "bg-red-900/20 border-red-500/30"
-                          : isTask
-                          ? "bg-emerald-900/20 border-emerald-500/30"
-                          : isMeeting
-                          ? "bg-purple-900/20 border-purple-500/30"
-                          : isChat
-                          ? "bg-slate-900/20 border-slate-500/30"
-                          : isVent
-                          ? "bg-yellow-900/20 border-yellow-500/30"
-                          : "bg-slate-700/30 border-slate-600/30"
-                      }`}
-                    >
-                      {log}
-                    </motion.p>
-                  );
-                })
-              )}
+                    return (
+                      <motion.p
+                        key={`${Date.now()}-${index}`}
+                        layout
+                        initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                        animate={{ 
+                          opacity: 1, 
+                          y: 0, 
+                          scale: 1,
+                          transition: { duration: 0.3 }
+                        }}
+                        exit={{ opacity: 0, x: -20, scale: 0.98 }}
+                        transition={{
+                          type: "spring",
+                          damping: 25,
+                          stiffness: 300,
+                          mass: 0.8
+                        }}
+                        className={`text-sm p-3 rounded-lg border ${
+                          isVote
+                            ? "bg-blue-900/20 border-blue-500/30"
+                            : isKill
+                            ? "bg-red-900/20 border-red-500/30"
+                            : isTask
+                            ? "bg-emerald-900/20 border-emerald-500/30"
+                            : isMeeting
+                            ? "bg-purple-900/20 border-purple-500/30"
+                            : isChat
+                            ? "bg-slate-900/20 border-slate-500/30"
+                            : isVent
+                            ? "bg-yellow-900/20 border-yellow-500/30"
+                            : "bg-slate-700/30 border-slate-600/30"
+                        }`}
+                      >
+                        {log}
+                      </motion.p>
+                    );
+                  })
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
         </div>
