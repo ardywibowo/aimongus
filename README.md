@@ -155,3 +155,20 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Inspired by the game Among Us
 - Built with Next.js and Socket.IO
 - AI powered by OpenAI
+
+# Aimong Us: Memory-Driven Strategic Deception in Multi-Agent Systems
+
+This project explores the intersection of AI memory systems and social deduction through a simulation platform that implements memory-driven agents in an Among Us-like environment. It directly addresses several key themes from the Parametric Memory Build Day event:
+
+## Connection to Parametric Memory Build Day Themes
+
+This project demonstrates practical applications of advanced memory systems in multi-agent environments, aligning with the event's focus on real-world AI memory architectures. Our implementation showcases three critical aspects of modern memory systems: First, we employ dynamic knowledge adaptation through our agents' suspicion and trust models, which continuously update based on game events and social interactions. Second, we implement efficient knowledge embedding by structuring agent memories into distinct components (episodic memory of events, social memory of interactions, and strategic memory of voting patterns). Finally, we explore universal memory architectures through our modular agent design, where memory components can be transferred and adapted across different agent personalities and roles. The project serves as a practical case study in how memory systems can enable complex social behaviors like deception, trust-building, and strategic planning in AI agents, while maintaining the engineering constraints necessary for real-time performance in a game environment.
+
+## Project Overview
+
+A simulation platform that explores how AI agents with persistent memory engage in strategic deception and cooperation within the social deduction game "Among Us". This project implements a multi-agent system where each agent maintains a dynamic memory model, enabling complex behaviors such as:
+
+1. Episodic Memory: Agents remember past events, interactions, and voting patterns
+2. Theory of Mind: Modeling other agents' knowledge and potential deception strategies
+3. Long-term Strategy: Developing and adapting strategies based on game history
+4. Trust Modeling: Building and breaking trust through consistent or deceptive behavior patterns
